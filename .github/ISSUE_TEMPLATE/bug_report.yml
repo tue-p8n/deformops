@@ -1,0 +1,36 @@
+name: Bug report
+description: A wrong result, a crash, or an error message that does not help.
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: >-
+        A short script that reproduces the problem, including the tensor shapes
+        and dtypes, and the backend if you pass one.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: The output of the command below.
+      value: |
+        python -c "import deformops, torch; print(deformops.__version__, torch.__version__, torch.version.cuda, torch.cuda.get_device_capability() if torch.cuda.is_available() else 'cpu')"
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Full error output
+      render: text

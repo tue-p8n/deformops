@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+# Cancel superseded in-progress runs on the same PR branch (pushes to
+# main always run to completion).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # The flake owns every gate: CI runs the same ruff, pyright and clang-format
+  # as a local `nix flake check`, and tool versions are pinned only there.
+  #
+  # Five checks run here. `lint` is ruff's diagnostics and formatting;
+  # `treefmt` covers every other language in the tree, clang-format over the
+  # CUDA sources included; `typecheck` is strict pyright against a CPU
+  # environment that also carries Triton, so the kernels resolve; `tests` is
+  # the CPU suite with its markers and coverage gate; `pre-commit` is the hook
+  # set.
+  #
+  # Nothing here needs a GPU or a CUDA toolchain. The per-CUDA operator
+  # libraries and the wheels that bundle them take about an hour each and are
+  # built by the manually dispatched Pages workflow.
+  checks:
+    name: Nix flake check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/determinate-nix-action@021c8a1bd3570eb21f5c20a054812b0c4d9ca614 # v3.22.3
+
+      # FlakeHub is off: it needs `id-token: write`, which this workflow has
+      # no other use for, and the GitHub Actions cache suffices for a CPU-only
+      # gate. That cache holds 10 GB per repository against a CPU closure of
+      # about 7.4 GB, so a run after an eviction rebuilds most of it. Paths
+      # substitutable from cache.nixos.org are not stored.
+      - name: Set up the Nix binary cache
+        uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-gha-cache: "enabled"
+          use-flakehub: "disabled"
+          diagnostic-endpoint: ""
+
+      - name: Run every flake check
+        run: nix flake check --print-build-logs
+
+  # Builds the distribution and checks it is usable from outside this tree.
+  # The test suite does not run against an installed wheel, so this is what
+  # catches a layout change that builds cleanly but cannot be imported.
+  #
+  # Past the build step the job does not use Nix: it installs the wheel with
+  # uv into an ordinary virtual environment, as a user would. The interpreter
+  # matrix exercises the supported Python range end to end; see the CI section
+  # of CONTRIBUTING.md.
+  #
+  # Runs after `checks` so all three runners reuse the cached CPU closure
+  # instead of building it concurrently, and a lint failure skips this job.
+  package:
+    name: Package (Python ${{ matrix.python-version }})
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/determinate-nix-action@021c8a1bd3570eb21f5c20a054812b0c4d9ca614 # v3.22.3
+
+      - name: Set up the Nix binary cache
+        uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-gha-cache: "enabled"
+          use-flakehub: "disabled"
+          diagnostic-endpoint: ""
+
+      # The generic wheel as the Pages and release paths build it. This is the
+      # derivation, not a `uv build`, so a flake change that breaks it fails
+      # here rather than at publish time.
+      - name: Build the wheel through the flake
+        run: nix build .#wheel --print-build-logs
+
+      # Also built the way release.yml builds it, because the flake's wheel
+      # goes straight to `build_meta.build_wheel` and never produces an sdist.
+      # A file missing from the sdist is invisible to the derivation above, so
+      # the wheel installed below is the one built from the sdist. uv comes
+      # from the dev shell, which pins it.
+      - name: Build sdist and wheel the way the release does
+        env:
+          DEFORMOPS_EXTENSIONS: none
+        run: nix develop .#cpu --command uv build --sdist --wheel -o dist
+
+      # `--torch-backend=cpu` rather than an extra index URL: uv resolves only
+      # within the first index that carries a package, so pointing an extra
+      # index at the CPU wheels leaves torch itself coming from PyPI and the
+      # resolution unsatisfiable. `--python` rather than VIRTUAL_ENV, because
+      # inside the dev shell uv otherwise resolves to the project environment,
+      # which lives in the read-only store and is not what this job tests.
+      # The smoke test runs from outside the checkout so nothing in the tree
+      # can stand in for the installed package.
+      - name: Install the wheel into a clean environment and exercise it
+        run: |
+          set -euo pipefail
+          nix develop .#cpu --command bash -euo pipefail -c '
+            uv python install ${{ matrix.python-version }}
+            uv venv --python ${{ matrix.python-version }} /tmp/wheel-env
+            uv pip install --python /tmp/wheel-env/bin/python \
+              --torch-backend=cpu "$(ls dist/*.whl)"
+            cd /tmp
+            /tmp/wheel-env/bin/python \
+              "$GITHUB_WORKSPACE/.github/scripts/wheel_smoke.py" \
+              "$(cat "$GITHUB_WORKSPACE/VERSION")"
+          '

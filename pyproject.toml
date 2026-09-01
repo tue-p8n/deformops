@@ -1,0 +1,448 @@
+[project]
+name = "deformops"
+requires-python = ">=3.12,<3.14"
+description = "Deformable sampling operations for PyTorch."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+
+authors = [{ "name" = "Kurt Stolle", "email" = "kurt@computer.org" }]
+
+# Version is dynamic so the CUDA-specific wheel build can append a PEP 440
+# local identifier (e.g. ``3.0.0+cu128``) for the per-CUDA package index.
+# ``setup.py`` is authoritative: it reads the base from the ``VERSION`` file
+# and appends ``+cuXXX`` when ``CUDA_VERSION`` is set.
+dynamic = ["version"]
+
+keywords = [
+  "perception",
+  "computer vision",
+  "deep learning",
+  "detection",
+  "segmentation",
+  "deformable detr",
+  "mask transformer",
+  "vision transformer",
+  "deformable convolution",
+  "deformable sampling",
+  "multi-scale deformable attention",
+  "deformconv",
+  "deformattn",
+  "msda",
+  "msdeformattn",
+  "pytorch",
+  "cuda",
+  "triton",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: GPU :: NVIDIA CUDA",
+  "Intended Audience :: Science/Research",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
+
+# ``torch`` belongs here, not only in the per-CUDA extras: without it a plain
+# ``pip install deformops`` yields a distribution whose every operator import
+# fails. When this project is synced with uv, the accelerator extras route
+# torch to the matching PyTorch index through [tool.uv.sources]. Published
+# metadata does not carry those mappings, so under pip the extras do not change
+# which torch build is installed; the index pip is pointed at decides.
+dependencies = ["torch>=2.11.0"]
+
+[project.urls]
+Homepage = "https://github.com/tue-p8n/deformops"
+Repository = "https://github.com/tue-p8n/deformops"
+Issues = "https://github.com/tue-p8n/deformops/issues"
+Changelog = "https://github.com/tue-p8n/deformops/blob/main/CHANGELOG.md"
+Paper = "https://openreview.net/forum?id=Q4jZ7zKNKx"
+
+# Build system
+# ============
+# `setuptools`, because torch's C++/CUDA extension build hooks target it.
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["sources"]
+# Discovery is scoped to `sources`, which contains exactly one package, so
+# nothing needs to be excluded by name. `tests/deformops/test_distribution.py`
+# checks the built artifact.
+
+[tool.setuptools]
+include-package-data = true
+
+# Optional dependencies
+# =====================
+
+[project.optional-dependencies]
+# The CPU extra also carries torchvision: the PyPI wheel is built against a
+# CUDA torch, so pairing it with a CPU torch leaves `torchvision::nms`
+# unregistered, which breaks `import torchvision` and, through it,
+# `transformers`. The source mapping below routes it to the matching CPU wheel.
+cpu = ["torch>=2.11.0", "torchvision>=0.24.0"]
+cu126 = ["torch>=2.11.0"]
+cu128 = ["torch>=2.11.0"]
+cu129 = ["torch>=2.11.0"]
+cu130 = ["torch>=2.12.0"]
+cu132 = ["torch>=2.12.0"]
+# Triton is not a base dependency: a CUDA build of torch declares it already,
+# so requiring it here changes nothing for CUDA users while costing users of a
+# CPU torch a 627 MB compiler they cannot run. The Triton backends detect it
+# at runtime.
+triton = [
+  "triton>=3.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+# Just-in-time compilation of the CUDA extensions. Ninja is what torch's
+# `load` path builds through, and it is absent from a default install, so
+# compilation is off unless this is requested. The CUDA toolchain itself
+# cannot be installed from PyPI and is the user's responsibility.
+jit = ["ninja>=1.11"]
+# The pre-made Mask2Former graph is built on the Hugging Face implementation,
+# so `transformers` is opt-in: `pip install deformops[mask2former]`. The base
+# install imports nothing from it. `torchmatch` supplies the loss's Hungarian
+# assignment; this package overrides the upstream scipy-backed matcher, so
+# scipy is not needed. torchmatch publishes no Python 3.12 wheel, so the extra
+# installs it on Python 3.13 only.
+mask2former = [
+  "torchmatch>=1.0.4; python_version >= '3.13'",
+  "transformers>=4.40.0",
+]
+# Deformable DETR is the plain Hugging Face graph; only its deformable
+# attention is overridden. The `SenseTime/deformable-detr` checkpoint uses a
+# timm backbone, so timm comes along.
+deformable-detr = ["timm>=0.9", "transformers>=4.40.0"]
+# The mmcv integration replaces mmcv's multi-scale deformable attention.
+# mmcv-lite is the pure-Python package without the compiled ops.
+mmcv = ["mmcv-lite>=1.7"]
+
+[dependency-groups]
+dev = [
+  "setuptools>=75",
+  "hypothesis>=6.141.0",
+  "matplotlib>=3.10.8",
+  "pandas>=2.3.3",
+  "pytest>=8.4.2",
+  "pytest-benchmark>=5.1.0",
+  "pytest-cov>=7.0.0",
+  "pytest-github-actions-annotate-failures>=0.3.0",
+  "pytest-mock>=3.15.1",
+  "pytest-sugar>=1.1.1",
+  "pytest-xdist>=3.8.0",
+  "rich>=13.0.0",
+  "ruff>=0.15.4",
+  "seaborn>=0.13.2",
+  "transformers>=4.40.0",
+  # Model integrations the CPU gate runs. torchmatch (Mask2Former's Hungarian
+  # assignment), timm (Deformable DETR's backbone) and mmcv-lite (the mmcv
+  # integration) all import on a CPU torch, so they belong in the
+  # shared dev environment.
+  "mmcv-lite>=1.7",
+  "timm>=0.9",
+  "torchmatch>=1.0.4; python_version >= '3.13'",
+  # Parity reference for classic deformable convolution. Part of the project
+  # environment so the comparison shares its cuDNN and NVIDIA libraries; a
+  # separately installed torchvision brings a second CUDA stack.
+  "torchvision>=0.24.0",
+]
+
+# uv
+# ==
+# uv resolves the lock and routes torch to a per-extra index; see
+# https://docs.astral.sh/uv/guides/integration/pytorch/
+
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+required-environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "cu126" },
+    { extra = "cu128" },
+    { extra = "cu129" },
+    { extra = "cu130" },
+    { extra = "cu132" },
+  ],
+]
+
+[tool.uv.pip]
+# PyTorch wheel index is selected automatically based on the environment when
+# using the `uv pip` interface. Ignored when using `uv` directly.
+torch-backend = "auto"
+
+[tool.uv.sources]
+# PyTorch sources are split per-index depending on the installed extra.
+#
+# torchvision is not mapped to every index: that would need it in every
+# accelerator extra, and it is only a development comparison reference and a
+# transitive import of `transformers`.
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu126", extra = "cu126" },
+  { index = "pytorch-cu128", extra = "cu128" },
+  { index = "pytorch-cu129", extra = "cu129" },
+  { index = "pytorch-cu130", extra = "cu130" },
+  { index = "pytorch-cu132", extra = "cu132" },
+]
+# Only the CPU extra pins it; a CUDA torch gets a working torchvision from the
+# default index, but the CPU build must come from the PyTorch CPU index.
+torchvision = [{ index = "pytorch-cpu", extra = "cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+# Testing
+# =======
+# Tests run under pytest, with coverage through `pytest-cov` and benchmarks
+# through `pytest-benchmark`.
+
+[tool.coverage.run]
+branch = true
+source = ["sources/deformops"]
+# Every module under `backends/triton` calls `require_triton` before its own
+# `import triton`, so on a host without Triton each module reports 0% covered
+# rather than skipped. CI runs without Triton, so the package is omitted from
+# the count. One pattern per directory, because a coverage glob does not cross
+# a directory separator.
+omit = [
+  "*/backends/triton/*.py",
+  "*/backends/triton/_kernels/*.py",
+  "*/backends/triton/experimental/*.py",
+  "*/backends/triton/experimental/_kernels/*.py",
+]
+
+[tool.coverage.report]
+# CI runs CPU-only (-m "not gpu and not integration"), so the CUDA and Triton
+# backends are uncovered; this threshold measures what the CPU matrix can
+# reach. The runners have no CUDA toolchain, so a few build paths take their
+# fallback branch there.
+fail_under = 77
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "@(abc\\.)?abstractmethod",
+]
+
+[tool.pytest.ini_options]
+# One -m only: pytest keeps the last -m it sees, so both conditions live in a
+# single expression.
+addopts = "-m 'not integration and not gpu' --benchmark-disable"
+pythonpath = ["sources"]
+testpaths = ["tests"]
+junit_family = "xunit2"
+junit_suite_name = "tests"
+markers = [
+  "integration: marks as integration test",
+  "notebooks: marks as notebook test",
+  "gpu: marks as gpu test",
+  "slow: marks tests as slow",
+  "unit: fast offline tests",
+  "fp64: exercises a compiled CUDA extension at double precision; needs DEFORMOPS_COMPILE=always because prebuilt libraries are built without double precision",
+]
+filterwarnings = [
+  # Dynamo traces through @functools.lru_cache wrappers (the stride/thread
+  # heuristics in core/tuning.py carry them). The functions are pure
+  # so tracing through the cache is correct; PyTorch warns out of caution.
+  "ignore:Dynamo detected a call to a `functools.lru_cache`.*:UserWarning",
+]
+
+# Linting & formatting
+# ====================
+[tool.ruff]
+target-version = 'py313'
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+  "F",    # flake8
+  "E",    # pycodestyle
+  "B",    # flake8-bugbear
+  "C",    # mccabe
+  "I",    # isort
+  "ARG",  # flake8-unused-arguments
+  "C4",   # flake8-comprehensions
+  "EM",   # flake8-errmsg
+  "ICN",  # flake8-import-conventions
+  "G",    # flake8-logging-format
+  "PGH",  # pygrep-hooks
+  "PIE",  # flake8-pie
+  "PL",   # pylint
+  "PT",   # flake8-pytest-style
+  "PTH",  # flake8-use-pathlib
+  "RET",  # flake8-return
+  "SIM",  # flake8-simplify
+  "T20",  # flake8-print
+  "UP",   # pyupgrade
+  "NPY",  # NumPy specific rules
+  "FURB", # refurb
+  "PYI",  # flake8-pyi
+]
+# Rule suppressions belong in `ignore`, path exclusions in `exclude`:
+# [tool.ruff.lint].exclude takes path globs, not rule codes. PLR2004
+# (magic-value comparison) is active on sources/; tests/ waives it via
+# per-file-ignores below, where literal constants are the point.
+ignore = [
+  # Counts positional parameters. The signatures it flags have a fixed arity:
+  # Triton kernels take their launch configuration positionally, torch.library
+  # needs the full op schema, and the functional API mirrors that schema.
+  # PLR0913 (total arguments) stays on, scoped per file.
+  "PLR0917",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Triton kernels take long stride/shape parameter lists by calling-convention
+# and use `l` for the multi-scale level index. These are not bugs. Scoped
+# across both operators: the calling convention is Triton's, not one operator's.
+"sources/deformops/backends/triton/**/*.py" = [
+  "PLR0913", # too many args (Triton kernels)
+  "PLR0915", # too many statements (Triton kernels)
+  "C901",    # branching on compile-time constants is specialization, not flow
+  "ARG001",  # unused stride/shape args required by kernel signature
+  "ARG002",  # same for autograd Function methods
+  "E741",    # `l` = level index
+  "E501",    # long lines in kernel argument lists
+  "E402",    # require_triton() must run before `import triton`, which pushes
+  # every later import below a non-import statement
+]
+"sources/deformops/backends/eager/*.py" = ["PLR0913", "ARG002"]
+"sources/deformops/nn/*.py" = [
+  "E501",    # union type annotation on ``aggregate`` parameter
+  "PLC0415", # local import breaks cycle
+]
+"sources/deformops/integrations/torchvision.py" = [
+  "PLR0913", # mirrors torchvision.ops.deform_conv2d's own signature
+]
+"sources/deformops/backends/**/*.py" = [
+  "PLR0913", # backends mirror operator/kernel function schemas
+]
+"sources/deformops/backends/cuda/*.py" = [
+  "PLR0913", # autograd registrations take the full schema
+  "ARG001",
+]
+"sources/deformops/core/build.py" = [
+  "PLC0415", # local import inside register_op_pair (build-time minimization)
+  "PLR0915",
+]
+
+# Setuptools (`setup.py`) is one-shot; pathlib is preferred everywhere else.
+
+"setup.py" = ["PLC0415", "PTH103", "PTH113", "PTH118", "PTH122"]
+
+# CI helper scripts: small, one-shot and literal-heavy. They print to the
+# workflow log, and the wheel smoke test imports inside a function so it can
+# observe that importing the package pulls in no torch.
+".github/scripts/**/*.py" = ["PLC0415", "PLR2004", "T201"]
+
+
+# Tests can be more relaxed than library code.
+"tests/**/*.py" = [
+  "ARG001",
+  "ARG002",
+  "E402",
+  "E501",
+  "E741",
+  "PLC0415",
+  "PLR0913",
+  "PLR0915",
+  "PLR2004",
+  "T201",
+  "PT011",
+  "PTH100",
+  "PTH118",
+  "PTH123",
+  "F841",
+  "B007",
+  "EM101",
+  "EM102",
+  "SIM105",
+  "NPY002",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+ignore-decorators = ["typing.overload", "typing.override"]
+
+[tool.ruff.lint.pylint]
+max-args = 12
+max-bool-expr = 8
+max-branches = 16
+
+[tool.ruff.lint.flake8-unused-arguments]
+ignore-variadic-names = true
+
+[tool.ruff.lint.flake8-import-conventions.aliases]
+"matplotlib.pyplot" = "plt"
+numpy = "np"
+pandas = "pd"
+seaborn = "sns"
+"unipercept" = "up"
+"laco.language" = "L"
+"hydra_zen" = "hz"
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+# Type checking
+# =============
+[tool.ty.environment]
+root = ["./sources"]
+
+[tool.ty.src]
+include = ["sources"]
+
+[tool.pyright]
+include = ["sources"]
+stubPath = "typings"
+typeCheckingMode = "strict"
+reportMissingImports = false
+reportPrivateImportUsage = false
+reportMissingTypeStubs = true
+strictListInference = true
+strictSetInference = true
+reportImportCycles = true
+reportMatchNotExhaustive = true
+reportImplicitOverride = "warning"
+reportUnknownMemberType = false
+reportUninitializedInstanceVariable = false
+reportUnknownVariableType = false
+reportUnusedCallResult = false
+pythonVersion = "3.13"
+pythonPlatform = "Linux"
+executionEnvironments = [{ root = "sources" }]

@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions about the method or the measurements
+    url: https://openreview.net/forum?id=Q4jZ7zKNKx
+    about: >-
+      The kernel design, the backend selection policy and the benchmarks are
+      described in the paper, Efficient Multi-Scale Deformable Attention on GPUs.
+  - name: Security vulnerability
+    url: https://github.com/tue-p8n/deformops/security/advisories/new
+    about: Report vulnerabilities privately, as described in SECURITY.md.

@@ -1,0 +1,201 @@
+name: Publish package index (Pages)
+
+# Owns the single GitHub Pages deployment. Builds, once per supported CUDA
+# version:
+#   * stable-ABI operator libraries (.so)         -> ops/<pkgver>/<cuXXX>/
+#   * per-CUDA wheels that bundle those kernels    -> whl/<cuXXX>/ (PEP 503)
+# and deploys both (plus a landing page) in a single Pages publish. Because the
+# kernels use the Torch Stable ABI, one build per CUDA version works across
+# every Python/PyTorch version, so the matrix is CUDA-only.
+#
+# Pages allows only one deployment per site, so ops + wheels must be
+# assembled and deployed by this single workflow. PyPI publishing of the
+# generic wheel/sdist lives separately in release.yml.
+#
+# Manual only: each per-CUDA build compiles the kernels for every supported
+# GPU architecture, about an hour per CUDA version without a warm binary
+# cache. Run via workflow_dispatch when a release needs fresh kernels.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-ops:
+    name: Build ops (${{ matrix.cuda }})
+    runs-on: ubuntu-latest
+    env:
+      ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        cuda: [cu126, cu128, cu129, cu130, cu132]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      # Required, not optional. Each per-CUDA build takes about an hour from
+      # cold, which is why the next step refuses to build from source at all:
+      # with the ATTIC_TOKEN secret unset this step is skipped, nothing is
+      # substitutable, and that step fails the job. Set the ATTIC_ENDPOINT and
+      # ATTIC_CACHE variables and the ATTIC_TOKEN secret, and warm the cache
+      # locally, before dispatching this workflow.
+      - name: Set up Attic binary cache
+        if: ${{ env.ATTIC_TOKEN != '' }}
+        uses: ryanccn/attic-action@5635a15ef0c5462194ffbd05d1daeddc74625c3a # v0
+        with:
+          endpoint: ${{ vars.ATTIC_ENDPOINT }}
+          cache: ${{ vars.ATTIC_CACHE }}
+          token: ${{ env.ATTIC_TOKEN }}
+
+      - name: Fail if the cache is not fully warm
+        run: |
+          set -euo pipefail
+          if nix build .#ops-${{ matrix.cuda }} --dry-run --no-warn-dirty 2>&1 \
+              | tee dry-run.log | grep -q "will be built:"; then
+            echo "::error::Cache miss for ops-${{ matrix.cuda }}: refusing to build from source in CI. Warm the Cachix/Attic cache locally first."
+            cat dry-run.log
+            exit 1
+          fi
+
+      - name: Build ops (${{ matrix.cuda }})
+        run: nix build .#ops-${{ matrix.cuda }} --print-build-logs
+
+      - name: Stage libraries + manifest
+        run: |
+          set -euo pipefail
+          PKGVER="$(cat VERSION)"
+          DEST="ops/${PKGVER}/${{ matrix.cuda }}"
+          mkdir -p "$DEST"
+          cp result/*.so "$DEST/"
+          python3 - "$DEST" <<'PY'
+          import hashlib, json, pathlib, sys
+          d = pathlib.Path(sys.argv[1])
+          manifest = {}
+          for so in sorted(d.glob("*.so")):
+              blob = so.read_bytes()
+              manifest[so.stem] = {
+                  "file": so.name,
+                  "sha256": hashlib.sha256(blob).hexdigest(),
+                  "size": len(blob),
+              }
+          if not manifest:
+              raise SystemExit("no .so files staged")
+          (d / "manifest.json").write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+          )
+          PY
+
+      - name: Upload ops artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ops-${{ matrix.cuda }}
+          path: ops/**
+          if-no-files-found: error
+
+  build-wheels:
+    name: Build wheel (${{ matrix.cuda }})
+    runs-on: ubuntu-latest
+    env:
+      ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        cuda: [cu126, cu128, cu129, cu130, cu132]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+
+      # Required, not optional. Each per-CUDA build takes about an hour from
+      # cold, which is why the next step refuses to build from source at all:
+      # with the ATTIC_TOKEN secret unset this step is skipped, nothing is
+      # substitutable, and that step fails the job. Set the ATTIC_ENDPOINT and
+      # ATTIC_CACHE variables and the ATTIC_TOKEN secret, and warm the cache
+      # locally, before dispatching this workflow.
+      - name: Set up Attic binary cache
+        if: ${{ env.ATTIC_TOKEN != '' }}
+        uses: ryanccn/attic-action@5635a15ef0c5462194ffbd05d1daeddc74625c3a # v0
+        with:
+          endpoint: ${{ vars.ATTIC_ENDPOINT }}
+          cache: ${{ vars.ATTIC_CACHE }}
+          token: ${{ env.ATTIC_TOKEN }}
+
+      - name: Fail if the cache is not fully warm
+        run: |
+          set -euo pipefail
+          if nix build .#wheel-${{ matrix.cuda }} --dry-run --no-warn-dirty 2>&1 \
+              | tee dry-run.log | grep -q "will be built:"; then
+            echo "::error::Cache miss for wheel-${{ matrix.cuda }}: refusing to build from source in CI. Warm the Cachix/Attic cache locally first."
+            cat dry-run.log
+            exit 1
+          fi
+
+      - name: Build wheel (${{ matrix.cuda }})
+        run: nix build .#wheel-${{ matrix.cuda }} --print-build-logs
+
+      - name: Collect wheel
+        run: |
+          mkdir -p dist
+          cp result/*.whl dist/
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: whl-${{ matrix.cuda }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  publish-pages:
+    name: Assemble + deploy Pages index
+    needs: [build-ops, build-wheels]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Merge every ops-* artifact into public/ (they carry the ops/ prefix).
+      - name: Download ops artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: ops-*
+          path: public
+          merge-multiple: true
+
+      # Keep wheel artifacts separate (whl-<cuXXX>/) so the assembler can map
+      # each wheel to its CUDA index.
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: whl-*
+          path: wheel-staging
+
+      - name: Assemble ops + PEP 503 wheel index
+        run: python3 .github/scripts/build_pages_index.py public wheel-staging
+
+      - name: Setup Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite the paper describing its kernels,
+  together with the papers that introduced the operators you use
+  (see the Citation section of the README).
+title: "DeformOps: deformable sampling operators for PyTorch"
+type: software
+authors:
+  - family-names: Stolle
+    given-names: Kurt H. W.
+    affiliation: Eindhoven University of Technology
+repository-code: "https://github.com/tue-p8n/deformops"
+license: MIT
+version: 3.0.0
+date-released: 2026-09-01
+preferred-citation:
+  type: article
+  title: "Efficient Multi-Scale Deformable Attention on GPUs"
+  authors:
+    - family-names: Stolle
+      given-names: Kurt H. W.
+      affiliation: Eindhoven University of Technology
+  journal: "Transactions on Machine Learning Research"
+  year: 2026
+  url: "https://openreview.net/forum?id=Q4jZ7zKNKx"

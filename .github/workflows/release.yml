@@ -1,0 +1,114 @@
+name: Release
+
+# Builds the generic distribution only: a pure-Python wheel and sdist that
+# contain no prebuilt kernels. These are Python/PyTorch/CUDA independent and go
+# to PyPI. At runtime a GPU call with no pinned backend runs a Triton kernel;
+# the opt-in CUDA backend binds a prebuilt stable-ABI library when one is
+# available and JIT-compiles otherwise. The per-CUDA wheels that bundle kernels
+# are built and hosted on the GitHub Pages index by pages.yml, not here.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # upload assets to the GitHub release
+  id-token: write # PyPI trusted publishing (OIDC)
+
+jobs:
+  build-generic:
+    name: Build generic wheel + sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # The package version comes from the VERSION file, not from the tag, so
+      # a release whose tag disagrees with it would publish under a version
+      # nobody named. Refuse it before anything is built.
+      - name: Check the release tag matches VERSION
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          expected="v$(cat VERSION)"
+          if [ "$TAG" != "$expected" ]; then
+            echo "::error::Release tag '$TAG' does not match '$expected' from VERSION."
+            exit 1
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+
+      # Pure-Python, version "X.Y.Z", tagged py3-none-any. Builds the wheel from
+      # the sdist to catch packaging gaps (e.g. the VERSION file must be
+      # shipped). A build from the sdist compiles the CUDA kernels by default,
+      # so the generic wheel opts out.
+      - name: Build sdist + wheel
+        env:
+          DEFORMOPS_EXTENSIONS: none
+        run: uv build --sdist --wheel -o dist
+
+      # The same smoke test the CI package job runs: the built wheel in a
+      # fresh virtual environment with a CPU torch, exercised from outside the
+      # checkout so nothing in the tree can stand in for the installed package.
+      # `--torch-backend=cpu` rather than an extra index URL, because uv
+      # resolves each package within the first index that carries it.
+      - name: Install the wheel into a clean environment and exercise it
+        run: |
+          set -euo pipefail
+          uv python install 3.13
+          uv venv --python 3.13 /tmp/wheel-env
+          uv pip install --python /tmp/wheel-env/bin/python \
+            --torch-backend=cpu "$(ls dist/*.whl)"
+          cd /tmp
+          /tmp/wheel-env/bin/python \
+            "$GITHUB_WORKSPACE/.github/scripts/wheel_smoke.py" \
+            "$(cat "$GITHUB_WORKSPACE/VERSION")"
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-generic
+          path: dist/*
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build-generic
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/deformops
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download generic dist
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist-generic
+          path: dist
+
+      # `skip-existing` lets a re-run succeed when the files are already on
+      # PyPI, such as after a manual upload of the same version.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          skip-existing: true
+
+  upload-release-assets:
+    name: Attach generic dist to release
+    needs: build-generic
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download generic dist
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist-generic
+          path: dist
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: dist/*

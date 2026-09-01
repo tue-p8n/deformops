@@ -1,0 +1,4 @@
+# The base version is read from VERSION by setup.py at build time (the project
+# version is declared dynamic), so it must be present in the sdist too: uv and
+# python-build build the wheel from the unpacked sdist.
+include VERSION
