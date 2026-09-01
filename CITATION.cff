@@ -11,7 +11,7 @@ authors:
     affiliation: Eindhoven University of Technology
 repository-code: "https://github.com/tue-p8n/deformops"
 license: MIT
-version: 3.0.0
+version: 3.0.1
 date-released: 2026-09-01
 preferred-citation:
   type: article
