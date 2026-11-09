@@ -93,6 +93,7 @@ cu128 = ["torch>=2.11.0"]
 cu129 = ["torch>=2.11.0"]
 cu130 = ["torch>=2.12.0"]
 cu132 = ["torch>=2.12.0"]
+cu134 = ["torch>=2.15.0"]
 # Triton is not a base dependency: a CUDA build of torch declares it already,
 # so requiring it here changes nothing for CUDA users while costing users of a
 # CPU torch a 627 MB compiler they cannot run. The Triton backends detect it
@@ -171,6 +172,7 @@ conflicts = [
     { extra = "cu129" },
     { extra = "cu130" },
     { extra = "cu132" },
+    { extra = "cu134" },
   ],
 ]
 
@@ -192,6 +194,7 @@ torch = [
   { index = "pytorch-cu129", extra = "cu129" },
   { index = "pytorch-cu130", extra = "cu130" },
   { index = "pytorch-cu132", extra = "cu132" },
+  { index = "pytorch-cu134", extra = "cu134" },
 ]
 # Only the CPU extra pins it; a CUDA torch gets a working torchvision from the
 # default index, but the CPU build must come from the PyTorch CPU index.
@@ -225,6 +228,11 @@ explicit = true
 [[tool.uv.index]]
 name = "pytorch-cu132"
 url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu134"
+url = "https://download.pytorch.org/whl/cu134"
 explicit = true
 
 # Testing

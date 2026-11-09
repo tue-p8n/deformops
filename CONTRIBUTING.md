@@ -203,7 +203,7 @@ on both supported Python versions, which `nix flake check` does not.
 ### Environments
 
 - **GPU work: `nix develop .#cu128`**
-  (also `cu126`, `cu129`, `cu130`, `cu132`)
+  (also `cu126`, `cu129`, `cu130`, `cu132`, `cu134`)
   supplies nvcc, the profiler, the host CUDA driver on the loader path
   and a virtual environment with a working CUDA torch.
 - **CPU work: `nix develop .#cpu`**
@@ -268,7 +268,7 @@ Publishing uses two workflows.
   and attaches the files to the GitHub release.
 - `pages.yml` runs only on `workflow_dispatch`,
   since a per-CUDA build takes about an hour.
-  Per CUDA version (`cu126`/`cu128`/`cu129`/`cu130`/`cu132`)
+  Per CUDA version (`cu126`/`cu128`/`cu129`/`cu130`/`cu132`/`cu134`)
   it builds the stable-ABI operator libraries (`nix build .#ops-<cuXXX>`)
   and a wheel bundling them (`nix build .#wheel-<cuXXX>`),
   and deploys both with a PEP 503 index to GitHub Pages.

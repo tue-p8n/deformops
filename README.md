@@ -36,7 +36,8 @@ pip install deformops
 ```
 
 `deformops` supports Python 3.12 and 3.13
-and needs PyTorch 2.11 or newer (2.12 or newer for CUDA 13.x).
+and needs PyTorch 2.11 through 2.15
+(2.12 or newer for CUDA 13.0 and 13.2; 2.15 or newer for CUDA 13.4).
 A bare install needs only `torch`
 and gives the eager backends on any platform.
 The GPU kernels need Linux x86-64 and a CUDA-capable GPU.
@@ -73,7 +74,7 @@ A host compiler newer than PyTorch's range for the CUDA toolkit fails torch's ve
 
 | Install                      | What it adds                                                                  |
 | :--------------------------- | :---------------------------------------------------------------------------- |
-| `deformops[cpu]`, `deformops[cu126]`, `deformops[cu128]`, `deformops[cu129]`, `deformops[cu130]`, `deformops[cu132]` | In a uv-synced checkout, routes `torch` to the CPU or matching CUDA wheel index (`cu130` and `cu132` need torch 2.12 or newer). |
+| `deformops[cpu]`, `deformops[cu126]`, `deformops[cu128]`, `deformops[cu129]`, `deformops[cu130]`, `deformops[cu132]`, `deformops[cu134]` | In a uv-synced checkout, routes `torch` to the CPU or matching CUDA wheel index (`cu130` and `cu132` need torch 2.12 or newer; `cu134` needs torch 2.15 or newer). |
 | `deformops[triton]`          | Installs the Triton compiler for a CPU torch.                                 |
 | `deformops[jit]`             | Installs `ninja`, so torch can compile a kernel locally.                      |
 | `deformops[mask2former]`     | Installs `transformers`, and `torchmatch` on Python 3.13, for the pre-made Mask2Former graph. |

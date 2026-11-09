@@ -5,6 +5,7 @@
     tue-p8n.url = "github:tue-p8n/nix";
     nixpkgs.follows = "tue-p8n/nixpkgs";
     flake-parts.follows = "tue-p8n/flake-parts";
+    nixpkgs-cuda.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
 
   outputs =
@@ -19,10 +20,16 @@
         {
           p8n,
           pkgs,
+          system,
           ...
         }:
         let
           inherit (pkgs) lib;
+
+          nixpkgsCuda = import inputs.nixpkgs-cuda {
+            inherit system;
+            config.allowUnfree = true;
+          };
 
           projectName = "deformops";
           pyproject = p8n.uv.readProject ./.;
@@ -103,6 +110,12 @@
               accel = "cuda13_2";
               version = "13.2";
               pkgs = pkgs.cudaPackages_13_2.pkgs;
+            }
+            {
+              extra = "cu134";
+              accel = "cuda13_4";
+              version = "13.4";
+              pkgs = pkgs.cudaPackages_13_4.pkgs;
             }
           ];
 
@@ -191,6 +204,12 @@
             '';
         in
         {
+          p8n.cuda.overlays = [
+            (_final: _prev: {
+              cudaPackages_13_4 = nixpkgsCuda.cudaPackages_13_4;
+            })
+          ];
+
           devShells =
             builtins.listToAttrs (
               map (v: {

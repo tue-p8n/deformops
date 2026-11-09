@@ -253,7 +253,7 @@ def _msda_backward_reduce_kernel(  # noqa: PLR0913
                 p_off_masked[:, None] >= 0
             )
             first_i = tl.min(tl.where(match, q_indices[:, None], BLOCK_SIZE_Q), axis=0)
-            redirect = first_i[None, :] == q_indices[:, None]
+            redirect = first_i[None, :] == q_indices[:, None]  # pyright: ignore[reportCallIssue,reportArgumentType]
             accumulated = tl.sum(
                 tl.where(redirect[:, :, None], contrib[None, :, :], 0.0), axis=1
             )
@@ -275,7 +275,7 @@ def _msda_backward_reduce_kernel(  # noqa: PLR0913
                 p_off_masked[:, None] >= 0
             )
             first_i = tl.min(tl.where(match, q_indices[:, None], BLOCK_SIZE_Q), axis=0)
-            redirect = first_i[None, :] == q_indices[:, None]
+            redirect = first_i[None, :] == q_indices[:, None]  # pyright: ignore[reportCallIssue,reportArgumentType]
             accumulated = tl.sum(
                 tl.where(redirect[:, :, None], contrib[None, :, :], 0.0), axis=1
             )
@@ -297,7 +297,7 @@ def _msda_backward_reduce_kernel(  # noqa: PLR0913
                 p_off_masked[:, None] >= 0
             )
             first_i = tl.min(tl.where(match, q_indices[:, None], BLOCK_SIZE_Q), axis=0)
-            redirect = first_i[None, :] == q_indices[:, None]
+            redirect = first_i[None, :] == q_indices[:, None]  # pyright: ignore[reportCallIssue,reportArgumentType]
             accumulated = tl.sum(
                 tl.where(redirect[:, :, None], contrib[None, :, :], 0.0), axis=1
             )
@@ -319,7 +319,7 @@ def _msda_backward_reduce_kernel(  # noqa: PLR0913
                 p_off_masked[:, None] >= 0
             )
             first_i = tl.min(tl.where(match, q_indices[:, None], BLOCK_SIZE_Q), axis=0)
-            redirect = first_i[None, :] == q_indices[:, None]
+            redirect = first_i[None, :] == q_indices[:, None]  # pyright: ignore[reportCallIssue,reportArgumentType]
             accumulated = tl.sum(
                 tl.where(redirect[:, :, None], contrib[None, :, :], 0.0), axis=1
             )
@@ -429,8 +429,8 @@ def _reduce_one_corner(  # noqa: PLR0913
         q_indices.to(tl.int64) & IDX_MASK
     )
     sorted_packed = tl.sort(packed)
-    sorted_p_off = (sorted_packed >> IDX_BITS).to(tl.int32)
-    sigma = (sorted_packed & IDX_MASK).to(tl.int32)
+    sorted_p_off = (sorted_packed >> IDX_BITS).to(tl.int32)  # pyright: ignore[reportOperatorIssue]
+    sigma = (sorted_packed & IDX_MASK).to(tl.int32)  # pyright: ignore[reportOperatorIssue]
 
     # Gather contrib into sorted order: sorted_contrib[i] = contrib[sigma[i]].
     gather_mask = sigma[:, None] == q_indices[None, :]
