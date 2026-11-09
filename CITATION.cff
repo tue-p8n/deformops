@@ -11,8 +11,8 @@ authors:
     affiliation: Eindhoven University of Technology
 repository-code: "https://github.com/tue-p8n/deformops"
 license: MIT
-version: 3.0.1
-date-released: 2026-09-01
+version: 3.1.0
+date-released: 2026-11-09
 preferred-citation:
   type: article
   title: "Efficient Multi-Scale Deformable Attention on GPUs"

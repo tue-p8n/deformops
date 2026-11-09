@@ -24,7 +24,7 @@ and single-scale deformable sampling (InternImage, Wang et al., CVPR 2023).
 (TMLR 2026)
 describes the kernels.
 
-Version 3.0.1 (from `VERSION`), Python 3.12 or 3.13, MIT license.
+Version 3.1.0 (from `VERSION`), Python 3.12 or 3.13, MIT license.
 
 ## Performance operating point
 

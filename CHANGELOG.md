@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.1.0
+
+_November 9, 2026_
+
+- Added support for PyTorch 2.15 and CUDA 13.4.
+- Added the `cu134` optional dependency and wheel distribution.
+
 ## v3.0.1
 
 _September 1, 2026_
