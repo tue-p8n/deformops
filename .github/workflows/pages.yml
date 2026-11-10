@@ -30,8 +30,6 @@ jobs:
   build-ops:
     name: Build ops (${{ matrix.cuda }})
     runs-on: ubuntu-latest
-    env:
-      ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -39,35 +37,35 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+      - name: Free runner disk space
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
 
-      # Required, not optional. Each per-CUDA build takes about an hour from
-      # cold, which is why the next step refuses to build from source at all:
-      # with the ATTIC_TOKEN secret unset this step is skipped, nothing is
-      # substitutable, and that step fails the job. Set the ATTIC_ENDPOINT and
-      # ATTIC_CACHE variables and the ATTIC_TOKEN secret, and warm the cache
-      # locally, before dispatching this workflow.
-      - name: Set up Attic binary cache
-        if: ${{ env.ATTIC_TOKEN != '' }}
-        uses: ryanccn/attic-action@5635a15ef0c5462194ffbd05d1daeddc74625c3a # v0
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/determinate-nix-action@021c8a1bd3570eb21f5c20a054812b0c4d9ca614 # v3.22.3
         with:
-          endpoint: ${{ vars.ATTIC_ENDPOINT }}
-          cache: ${{ vars.ATTIC_CACHE }}
-          token: ${{ env.ATTIC_TOKEN }}
+          extra-conf: |
+            extra-substituters = https://cache.nixos-cuda.org https://nix-community.cachix.org
+            extra-trusted-public-keys = cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
 
-      - name: Fail if the cache is not fully warm
-        run: |
-          set -euo pipefail
-          if nix build .#ops-${{ matrix.cuda }} --dry-run --no-warn-dirty 2>&1 \
-              | tee dry-run.log | grep -q "will be built:"; then
-            echo "::error::Cache miss for ops-${{ matrix.cuda }}: refusing to build from source in CI. Warm the Cachix/Attic cache locally first."
-            cat dry-run.log
-            exit 1
-          fi
+      - name: Set up the Nix binary cache
+        uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-gha-cache: "enabled"
+          use-flakehub: "disabled"
+          diagnostic-endpoint: ""
 
       - name: Build ops (${{ matrix.cuda }})
         run: nix build .#ops-${{ matrix.cuda }} --print-build-logs
+
+      - name: Export ops store path for wheel job
+        run: nix copy --to "file://$PWD/nix-ops-cache" ./result
+
+      - name: Upload ops store cache
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ops-cache-${{ matrix.cuda }}
+          path: nix-ops-cache/**
+          if-no-files-found: error
 
       - name: Stage libraries + manifest
         run: |
@@ -103,9 +101,8 @@ jobs:
 
   build-wheels:
     name: Build wheel (${{ matrix.cuda }})
+    needs: [build-ops]
     runs-on: ubuntu-latest
-    env:
-      ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -113,32 +110,28 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
-
-      # Required, not optional. Each per-CUDA build takes about an hour from
-      # cold, which is why the next step refuses to build from source at all:
-      # with the ATTIC_TOKEN secret unset this step is skipped, nothing is
-      # substitutable, and that step fails the job. Set the ATTIC_ENDPOINT and
-      # ATTIC_CACHE variables and the ATTIC_TOKEN secret, and warm the cache
-      # locally, before dispatching this workflow.
-      - name: Set up Attic binary cache
-        if: ${{ env.ATTIC_TOKEN != '' }}
-        uses: ryanccn/attic-action@5635a15ef0c5462194ffbd05d1daeddc74625c3a # v0
+      - name: Install Determinate Nix
+        uses: DeterminateSystems/determinate-nix-action@021c8a1bd3570eb21f5c20a054812b0c4d9ca614 # v3.22.3
         with:
-          endpoint: ${{ vars.ATTIC_ENDPOINT }}
-          cache: ${{ vars.ATTIC_CACHE }}
-          token: ${{ env.ATTIC_TOKEN }}
+          extra-conf: |
+            extra-substituters = https://cache.nixos-cuda.org https://nix-community.cachix.org
+            extra-trusted-public-keys = cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
 
-      - name: Fail if the cache is not fully warm
-        run: |
-          set -euo pipefail
-          if nix build .#wheel-${{ matrix.cuda }} --dry-run --no-warn-dirty 2>&1 \
-              | tee dry-run.log | grep -q "will be built:"; then
-            echo "::error::Cache miss for wheel-${{ matrix.cuda }}: refusing to build from source in CI. Warm the Cachix/Attic cache locally first."
-            cat dry-run.log
-            exit 1
-          fi
+      - name: Set up the Nix binary cache
+        uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-gha-cache: "enabled"
+          use-flakehub: "disabled"
+          diagnostic-endpoint: ""
+
+      - name: Download ops store cache
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ops-cache-${{ matrix.cuda }}
+          path: nix-ops-cache
+
+      - name: Import prebuilt ops into Nix store
+        run: nix copy --from "file://$PWD/nix-ops-cache" --no-check-sigs --all
 
       - name: Build wheel (${{ matrix.cuda }})
         run: nix build .#wheel-${{ matrix.cuda }} --print-build-logs

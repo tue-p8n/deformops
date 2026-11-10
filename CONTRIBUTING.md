@@ -271,10 +271,8 @@ Publishing uses two workflows.
   Per CUDA version (`cu126`/`cu128`/`cu129`/`cu130`/`cu132`/`cu134`)
   it builds the stable-ABI operator libraries (`nix build .#ops-<cuXXX>`)
   and a wheel bundling them (`nix build .#wheel-<cuXXX>`),
+  attaches the wheels to the matching GitHub release when present,
   and deploys both with a PEP 503 index to GitHub Pages.
-  It refuses to build from source,
-  so it needs a warm Attic cache:
-  the `ATTIC_TOKEN` secret and the `ATTIC_ENDPOINT` and `ATTIC_CACHE` repository variables.
 
 ## Releasing
 
@@ -288,7 +286,7 @@ Publishing uses two workflows.
    smoke-tests the wheel and publishes it to PyPI;
    a re-run skips files PyPI already has.
 4. To refresh the per-CUDA libraries and wheels,
-   warm the Attic cache locally and dispatch `pages.yml`.
+   dispatch `pages.yml`.
 
 Because CI has no GPU,
 several CPU tests compare declarations across files:
