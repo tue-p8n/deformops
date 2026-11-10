@@ -160,6 +160,7 @@ jobs:
     needs: [build-ops, build-wheels]
     runs-on: ubuntu-latest
     permissions:
+      contents: write
       pages: write
       id-token: write
     environment:
@@ -184,6 +185,16 @@ jobs:
         with:
           pattern: whl-*
           path: wheel-staging
+
+      - name: Attach wheels to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v$(cat VERSION)"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" wheel-staging/*/*.whl --clobber
+          fi
 
       - name: Assemble ops + PEP 503 wheel index
         run: python3 .github/scripts/build_pages_index.py public wheel-staging
