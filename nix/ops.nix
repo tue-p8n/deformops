@@ -54,6 +54,7 @@ in
     # Compile every extension in EXTENSION_CONFIGS with CUDA kernels enabled.
     DEFORMOPS_EXTENSIONS = "all";
     FORCE_CUDA = "1";
+    TORCH_DONT_CHECK_COMPILER_ABI = "1";
     CUDA_VERSION = cudaVersion;
     CUDA_HOME = "${cudaPkgs.cudatoolkit}";
     CUDA_PATH = "${cudaPkgs.cudatoolkit}";

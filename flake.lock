@@ -325,11 +325,11 @@
         "uv2nix": "uv2nix"
       },
       "locked": {
-        "lastModified": 1794261238,
-        "narHash": "sha256-guhygU/QUfsN8ZBlLByRQB6/6gfQ5SiIUKqmwjtTBoI=",
+        "lastModified": 1794383501,
+        "narHash": "sha256-HP/7yPIkBSY01qIaWd+/K4EHONQc1UH+xhrPZRML/6U=",
         "owner": "tue-p8n",
         "repo": "nix",
-        "rev": "438982ce15ea8fe8c49fe7e95756959d01487184",
+        "rev": "47a3bc8d95f035570386fc9ed1f070e19cf6e912",
         "type": "github"
       },
       "original": {
