@@ -57,16 +57,6 @@ jobs:
       - name: Build ops (${{ matrix.cuda }})
         run: nix build .#ops-${{ matrix.cuda }} --print-build-logs
 
-      - name: Export ops store path for wheel job
-        run: nix copy --to "file://$PWD/nix-ops-cache" ./result
-
-      - name: Upload ops store cache
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: ops-cache-${{ matrix.cuda }}
-          path: nix-ops-cache/**
-          if-no-files-found: error
-
       - name: Stage libraries + manifest
         run: |
           set -euo pipefail
@@ -110,36 +100,33 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Install Determinate Nix
-        uses: DeterminateSystems/determinate-nix-action@021c8a1bd3570eb21f5c20a054812b0c4d9ca614 # v3.22.3
-        with:
-          extra-conf: |
-            extra-substituters = https://cache.nixos-cuda.org https://nix-community.cachix.org
-            extra-trusted-public-keys = cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
 
-      - name: Set up the Nix binary cache
-        uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
-        with:
-          use-gha-cache: "enabled"
-          use-flakehub: "disabled"
-          diagnostic-endpoint: ""
-
-      - name: Download ops store cache
+      - name: Download ops artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: ops-cache-${{ matrix.cuda }}
-          path: nix-ops-cache
-
-      - name: Import prebuilt ops into Nix store
-        run: nix copy --from "file://$PWD/nix-ops-cache" --no-check-sigs --all
+          name: ops-${{ matrix.cuda }}
+          path: ops-staging
 
       - name: Build wheel (${{ matrix.cuda }})
-        run: nix build .#wheel-${{ matrix.cuda }} --print-build-logs
+        run: |
+          set -euo pipefail
+          mkdir -p sources/deformops/core/_ext
+          find ops-staging -name "*.so" -exec cp {} sources/deformops/core/_ext/ \;
+          if [ -z "$(ls -A sources/deformops/core/_ext/*.so 2>/dev/null)" ]; then
+            echo "::error::No .so files found in ops-${{ matrix.cuda }} artifact"
+            exit 1
+          fi
+          cuda_raw="${{ matrix.cuda }}"
+          cuda_ver="${cuda_raw#cu}"
+          cuda_ver="$(echo "$cuda_ver" | sed 's/^\(..\)/\1./')"
+          DEFORMOPS_WHEEL_PLATLIB=1 CUDA_VERSION="$cuda_ver" uv run --with setuptools --with wheel python setup.py bdist_wheel
 
       - name: Collect wheel
         run: |
           mkdir -p dist
-          cp result/*.whl dist/
+          ls -la dist/*.whl
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
